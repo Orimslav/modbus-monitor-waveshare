@@ -1,0 +1,339 @@
+<!DOCTYPE html>
+<html lang="sk">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Modbus IO Monitor & Control — Waveshare RTU IO 8CH</title>
+<style>
+  body { background:#111; display:flex; justify-content:center; padding:20px; font-family:'Segoe UI',sans-serif; }
+  .container { width:100%; max-width:960px; }
+  @keyframes pwrok { 0%,100%{opacity:1} 50%{opacity:.5} }
+  @keyframes work  { 0%,33%{opacity:1} 34%,66%{opacity:.1} 67%,100%{opacity:1} }
+  @keyframes rxb   { 0%,49%{opacity:.15} 50%,100%{opacity:1} }
+  @keyframes txb   { 0%,39%{opacity:.15} 40%,79%{opacity:1} 80%,100%{opacity:.15} }
+  @keyframes flow  { to { stroke-dashoffset: -20; } }
+  .ap{animation:pwrok 2.5s ease-in-out infinite;} .aw{animation:work 1.0s linear infinite;}
+  .ar{animation:rxb 0.6s linear infinite;} .at{animation:txb 0.9s linear infinite;}
+  .f1{stroke-dasharray:6 4;animation:flow 1.0s linear infinite;}
+  .f2{stroke-dasharray:6 4;animation:flow 1.4s linear infinite;}
+  *{box-sizing:border-box;margin:0;padding:0;}
+  .app-win{border:1.5px solid #555;border-radius:6px;overflow:hidden;font-family:'Segoe UI',sans-serif;font-size:12px;background:#1e1e2e;margin-bottom:10px;}
+  .titlebar{background:#2d2d3f;padding:5px 10px;display:flex;align-items:center;gap:8px;border-bottom:1px solid #444;}
+  .titlebar span{font-size:11px;color:#aaa;flex:1;}
+  .win-btn{width:11px;height:11px;border-radius:50%;border:none;cursor:pointer;}
+  .win-close{background:#e74c3c;}.win-min{background:#f1c40f;}.win-max{background:#2ecc71;}
+  .conn-bar{background:#252535;border:1px solid #444;border-radius:4px;margin:8px;padding:5px 10px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;}
+  .conn-bar label{color:#aaa;font-size:11px;}
+  .conn-bar input{background:#1a1a2a;border:1px solid #555;border-radius:3px;color:#ddd;font-size:11px;padding:2px 5px;width:88px;}
+  .conn-bar input.sm{width:42px;}
+  .btn-connect{background:#2980b9;color:#fff;border:none;border-radius:4px;padding:4px 12px;font-size:11px;cursor:pointer;font-weight:500;}
+  .status-dot{width:8px;height:8px;border-radius:50%;background:#27ae60;display:inline-block;margin-right:3px;}
+  .status-txt{color:#27ae60;font-size:11px;}
+  .panels{display:grid;grid-template-columns:1fr 1fr;gap:8px;padding:0 8px 8px;}
+  .panel{border:1px solid #444;border-radius:4px;padding:5px 7px;background:#252535;}
+  .panel-title{font-size:9.5px;color:#888;margin-bottom:5px;padding-bottom:3px;border-bottom:1px solid #333;}
+  .ch-row{display:flex;align-items:center;gap:5px;margin-bottom:3px;}
+  .ch-label{color:#aaa;font-size:10px;width:26px;}
+  .led-sq{width:13px;height:13px;border-radius:2px;background:#333;border:1px solid #555;transition:background 0.2s;}
+  .led-sq.on{background:#27ae60!important;border-color:#1a7040!important;}
+  .state-txt{color:#666;font-size:10px;width:20px;}
+  .state-txt.on{color:#27ae60;}
+  .btn-on{color:#fff;border:none;border-radius:3px;padding:2px 6px;font-size:9.5px;cursor:pointer;font-weight:500;opacity:0.4;}
+  .btn-off{background:#555;color:#fff;border:none;border-radius:3px;padding:2px 6px;font-size:9.5px;cursor:pointer;font-weight:500;}
+  .btn-on:hover,.btn-off:hover{opacity:.85!important;}
+  .footer{text-align:center;color:#444;font-size:10px;margin-top:8px;font-family:monospace;}
+</style>
+</head>
+<body>
+<div class="container">
+<div class="app-win">
+  <div class="titlebar">
+    <button class="win-btn win-close"></button>
+    <button class="win-btn win-min"></button>
+    <button class="win-btn win-max"></button>
+    <span>Modbus IO Monitor &amp; Control — Waveshare RTU IO 8CH</span>
+  </div>
+  <div class="conn-bar">
+    <label>IP:</label><input value="10.10.10.10" readonly/>
+    <label>Port:</label><input class="sm" value="502" readonly/>
+    <label>Slave ID:</label><input class="sm" value="1" readonly/>
+    <button class="btn-connect">Connect</button>
+    <span class="status-dot"></span><span class="status-txt">Connected</span>
+  </div>
+  <div class="panels">
+    <div class="panel">
+      <div class="panel-title">Digital Inputs (FC02 — read only)</div>
+      <div id="di-rows"></div>
+    </div>
+    <div class="panel">
+      <div class="panel-title">Digital Outputs (FC05 — write / FC01 — read state)</div>
+      <div id="do-rows"></div>
+    </div>
+  </div>
+</div>
+
+<svg width="100%" viewBox="0 0 680 530" style="display:block;">
+  <rect x="140" y="22" width="520" height="7" rx="2" fill="#999" stroke="#666" stroke-width="0.4"/>
+  <rect x="140" y="272" width="520" height="7" rx="2" fill="#999" stroke="#666" stroke-width="0.4"/>
+  <text x="10" y="310" font-size="8" fill="#ccc" font-family="monospace" font-weight="500">Legenda:</text>
+  <line x1="10" y1="322" x2="30" y2="322" stroke="#e74c3c" stroke-width="2" stroke-linecap="round"/>
+  <text x="34" y="326" font-size="7.5" fill="#888" font-family="monospace">24V DC+</text>
+  <line x1="10" y1="336" x2="30" y2="336" stroke="#444" stroke-width="2" stroke-linecap="round"/>
+  <text x="34" y="340" font-size="7.5" fill="#888" font-family="monospace">GND</text>
+  <line x1="10" y1="350" x2="30" y2="350" stroke="#27ae60" stroke-width="2" stroke-linecap="round"/>
+  <text x="34" y="354" font-size="7.5" fill="#888" font-family="monospace">485 A+</text>
+  <line x1="10" y1="364" x2="30" y2="364" stroke="#8b4513" stroke-width="2" stroke-linecap="round"/>
+  <text x="34" y="368" font-size="7.5" fill="#888" font-family="monospace">485 B-</text>
+  <line x1="10" y1="378" x2="30" y2="378" stroke="#aaa" stroke-width="1" stroke-dasharray="3 2"/>
+  <text x="34" y="382" font-size="7.5" fill="#888" font-family="monospace">DI signál</text>
+  <line x1="10" y1="392" x2="30" y2="392" stroke="#aaa" stroke-width="1" stroke-dasharray="2 2"/>
+  <text x="34" y="396" font-size="7.5" fill="#888" font-family="monospace">DO signál</text>
+  <!-- DUPS40 -->
+  <rect x="148" y="18" width="8" height="11" rx="2" fill="#aaa" stroke="#888" stroke-width="0.3"/>
+  <rect x="218" y="18" width="8" height="11" rx="2" fill="#aaa" stroke="#888" stroke-width="0.3"/>
+  <rect x="148" y="271" width="8" height="11" rx="2" fill="#aaa" stroke="#888" stroke-width="0.3"/>
+  <rect x="218" y="271" width="8" height="11" rx="2" fill="#aaa" stroke="#888" stroke-width="0.3"/>
+  <rect x="142" y="28" width="18" height="250" rx="4" fill="#1a3a5c" stroke="#122840" stroke-width="0.4"/>
+  <rect x="158" y="28" width="76" height="250" rx="5" fill="#d0d4d8" stroke="#b8bcbf" stroke-width="0.5"/>
+  <rect x="158" y="28" width="76" height="8" rx="5" fill="#dde0e3"/>
+  <rect x="158" y="270" width="76" height="8" rx="5" fill="#dde0e3"/>
+  <rect x="164" y="50" width="18" height="12" rx="2" fill="#e74c3c" stroke="#c0392b" stroke-width="0.3"/>
+  <text x="173" y="59" text-anchor="middle" font-size="6" fill="#fff" font-family="sans-serif" font-weight="bold">MW</text>
+  <circle cx="167" cy="76" r="2.5" fill="#27ae60" class="ap"/>
+  <text x="173" y="80" font-size="6" fill="#888" font-family="monospace">DC OK</text>
+  <circle cx="167" cy="90" r="2.5" fill="#111" stroke="#333" stroke-width="0.3"/>
+  <text x="173" y="94" font-size="6" fill="#888" font-family="monospace">BAT Fail</text>
+  <circle cx="167" cy="104" r="2.5" fill="#27ae60" class="aw"/>
+  <text x="173" y="108" font-size="6" fill="#888" font-family="monospace">BAT</text>
+  <text x="196" y="140" text-anchor="middle" font-size="9" fill="#1a3a5c" font-family="sans-serif" font-weight="bold">DUPS40</text>
+  <text x="196" y="153" text-anchor="middle" font-size="6" fill="#999" font-family="monospace">24Vdc·40A</text>
+  <rect x="162" y="252" width="68" height="20" rx="3" fill="#1e2022" stroke="#111" stroke-width="0.3"/>
+  <rect x="165" y="254" width="9" height="16" rx="2" fill="#2d7a3a" stroke="#1a4d24" stroke-width="0.3"/>
+  <rect x="176" y="254" width="9" height="16" rx="2" fill="#2d7a3a" stroke="#1a4d24" stroke-width="0.3"/>
+  <rect x="190" y="254" width="9" height="16" rx="2" fill="#2d7a3a" stroke="#1a4d24" stroke-width="0.3"/>
+  <rect x="201" y="254" width="9" height="16" rx="2" fill="#2d7a3a" stroke="#1a4d24" stroke-width="0.3"/>
+  <rect x="212" y="254" width="9" height="16" rx="2" fill="#2d7a3a" stroke="#1a4d24" stroke-width="0.3"/>
+  <rect x="223" y="254" width="9" height="16" rx="2" fill="#2d7a3a" stroke="#1a4d24" stroke-width="0.3"/>
+  <text x="169" y="250" text-anchor="middle" font-size="5" fill="#888" font-family="monospace">B-</text>
+  <text x="180" y="250" text-anchor="middle" font-size="5" fill="#888" font-family="monospace">B+</text>
+  <text x="194" y="250" text-anchor="middle" font-size="5" fill="#aaa" font-family="monospace">DC-</text>
+  <text x="205" y="250" text-anchor="middle" font-size="5" fill="#e74c3c" font-family="monospace">DC+</text>
+  <text x="216" y="250" text-anchor="middle" font-size="5" fill="#aaa" font-family="monospace">DC-</text>
+  <text x="227" y="250" text-anchor="middle" font-size="5" fill="#e74c3c" font-family="monospace">DC+</text>
+  <!-- USR-DR134 -->
+  <rect x="256" y="18" width="6" height="11" rx="2" fill="#aaa" stroke="#888" stroke-width="0.3"/>
+  <rect x="256" y="271" width="6" height="11" rx="2" fill="#aaa" stroke="#888" stroke-width="0.3"/>
+  <rect x="244" y="28" width="56" height="250" rx="6" fill="#d4d8db" stroke="#bcc0c4" stroke-width="0.5"/>
+  <rect x="244" y="28" width="56" height="10" rx="6" fill="#e0e4e7"/>
+  <rect x="244" y="270" width="56" height="9" rx="4" fill="#e0e4e7"/>
+  <rect x="244" y="28" width="4" height="250" rx="2" fill="#c4c8cb"/>
+  <rect x="256" y="31" width="28" height="10" rx="2" fill="#bcc0c4" stroke="#aaa" stroke-width="0.3"/>
+  <text x="270" y="38" text-anchor="middle" font-size="6" fill="#888" font-family="monospace">LAN</text>
+  <circle cx="259" cy="35" r="1.8" fill="#f39c12" class="aw"/>
+  <circle cx="281" cy="35" r="1.8" fill="#27ae60" class="ap"/>
+  <circle cx="272" cy="148" r="20" fill="#cacecf" stroke="#b8bcbf" stroke-width="0.4"/>
+  <circle cx="272" cy="148" r="14" fill="#d0d4d6" stroke="#babec1" stroke-width="0.3"/>
+  <text x="272" y="152" text-anchor="middle" font-size="7" fill="#888" font-family="sans-serif" font-weight="500">PUSR</text>
+  <circle cx="249" cy="190" r="2.2" fill="#27ae60" class="ap"/>
+  <text x="254" y="194" font-size="5.5" fill="#888" font-family="monospace">POW</text>
+  <circle cx="249" cy="202" r="2.2" fill="#f39c12" class="aw"/>
+  <text x="254" y="206" font-size="5.5" fill="#888" font-family="monospace">WORK</text>
+  <circle cx="249" cy="214" r="2.2" fill="#27ae60" class="ar"/>
+  <text x="254" y="218" font-size="5.5" fill="#888" font-family="monospace">COM</text>
+  <circle cx="249" cy="226" r="2.2" fill="#f39c12" class="at"/>
+  <text x="254" y="230" font-size="5.5" fill="#888" font-family="monospace">LINK</text>
+  <rect x="248" y="252" width="48" height="20" rx="3" fill="#1e2022" stroke="#111" stroke-width="0.3"/>
+  <rect x="251" y="254" width="8" height="16" rx="2" fill="#c0392b" stroke="#7b241c" stroke-width="0.3"/>
+  <rect x="261" y="254" width="8" height="16" rx="2" fill="#555" stroke="#333" stroke-width="0.3"/>
+  <rect x="271" y="254" width="8" height="16" rx="2" fill="#2d7a3a" stroke="#1a4d24" stroke-width="0.3"/>
+  <rect x="281" y="254" width="8" height="16" rx="2" fill="#2d7a3a" stroke="#1a4d24" stroke-width="0.3"/>
+  <rect x="291" y="254" width="8" height="16" rx="2" fill="#555" stroke="#333" stroke-width="0.3"/>
+  <text x="255" y="250" text-anchor="middle" font-size="4.5" fill="#e74c3c" font-family="monospace">DC+</text>
+  <text x="265" y="250" text-anchor="middle" font-size="4.5" fill="#aaa" font-family="monospace">DC-</text>
+  <text x="275" y="250" text-anchor="middle" font-size="4.5" fill="#27ae60" font-family="monospace">A+</text>
+  <text x="285" y="250" text-anchor="middle" font-size="4.5" fill="#27ae60" font-family="monospace">B-</text>
+  <text x="295" y="250" text-anchor="middle" font-size="4.5" fill="#aaa" font-family="monospace">GND</text>
+  <!-- WAVESHARE -->
+  <rect x="318" y="18" width="8" height="11" rx="2" fill="#aaa" stroke="#888" stroke-width="0.3"/>
+  <rect x="400" y="18" width="8" height="11" rx="2" fill="#aaa" stroke="#888" stroke-width="0.3"/>
+  <rect x="318" y="271" width="8" height="11" rx="2" fill="#aaa" stroke="#888" stroke-width="0.3"/>
+  <rect x="400" y="271" width="8" height="11" rx="2" fill="#aaa" stroke="#888" stroke-width="0.3"/>
+  <rect x="308" y="28" width="192" height="250" rx="8" fill="#2a2e2f" stroke="#1a1d1e" stroke-width="0.5"/>
+  <rect x="308" y="28" width="192" height="11" rx="8" fill="#343839"/>
+  <rect x="308" y="270" width="192" height="9" rx="4" fill="#343839"/>
+  <rect x="308" y="34" width="192" height="5" fill="#343839"/>
+  <rect x="308" y="269" width="192" height="5" fill="#343839"/>
+  <rect x="320" y="58" width="168" height="160" rx="5" fill="#232729" stroke="#1a1d1e" stroke-width="0.3"/>
+  <rect x="314" y="30" width="182" height="16" rx="3" fill="#1e2022" stroke="#111" stroke-width="0.3"/>
+  <rect x="317" y="32" width="10" height="12" rx="1" fill="#2d7a3a" stroke="#1a4d24" stroke-width="0.3"/>
+  <rect x="329" y="32" width="10" height="12" rx="1" fill="#2d7a3a" stroke="#1a4d24" stroke-width="0.3"/>
+  <rect x="341" y="32" width="10" height="12" rx="1" fill="#2d7a3a" stroke="#1a4d24" stroke-width="0.3"/>
+  <rect x="353" y="32" width="10" height="12" rx="1" fill="#2d7a3a" stroke="#1a4d24" stroke-width="0.3"/>
+  <rect x="365" y="32" width="10" height="12" rx="1" fill="#2d7a3a" stroke="#1a4d24" stroke-width="0.3"/>
+  <rect x="377" y="32" width="10" height="12" rx="1" fill="#2d7a3a" stroke="#1a4d24" stroke-width="0.3"/>
+  <rect x="389" y="32" width="10" height="12" rx="1" fill="#2d7a3a" stroke="#1a4d24" stroke-width="0.3"/>
+  <rect x="401" y="32" width="10" height="12" rx="1" fill="#2d7a3a" stroke="#1a4d24" stroke-width="0.3"/>
+  <rect x="413" y="32" width="10" height="12" rx="1" fill="#2d7a3a" stroke="#1a4d24" stroke-width="0.3"/>
+  <rect x="425" y="32" width="10" height="12" rx="1" fill="#555" stroke="#333" stroke-width="0.3"/>
+  <rect x="437" y="32" width="10" height="12" rx="1" fill="#555" stroke="#333" stroke-width="0.3"/>
+  <rect x="449" y="32" width="10" height="12" rx="1" fill="#555" stroke="#333" stroke-width="0.3"/>
+  <rect x="461" y="32" width="10" height="12" rx="1" fill="#c0392b" stroke="#7b241c" stroke-width="0.3"/>
+  <text x="322" y="28" text-anchor="middle" font-size="4.5" fill="#888" font-family="monospace">DICOM</text>
+  <text x="334" y="28" text-anchor="middle" font-size="4.5" fill="#aaa" font-family="monospace">DI8</text>
+  <text x="346" y="28" text-anchor="middle" font-size="4.5" fill="#aaa" font-family="monospace">DI7</text>
+  <text x="358" y="28" text-anchor="middle" font-size="4.5" fill="#aaa" font-family="monospace">DI6</text>
+  <text x="370" y="28" text-anchor="middle" font-size="4.5" fill="#aaa" font-family="monospace">DI5</text>
+  <text x="382" y="28" text-anchor="middle" font-size="4.5" fill="#aaa" font-family="monospace">DI4</text>
+  <text x="394" y="28" text-anchor="middle" font-size="4.5" fill="#aaa" font-family="monospace">DI3</text>
+  <text x="406" y="28" text-anchor="middle" font-size="4.5" fill="#aaa" font-family="monospace">DI2</text>
+  <text x="418" y="28" text-anchor="middle" font-size="4.5" fill="#aaa" font-family="monospace">DI1</text>
+  <text x="430" y="28" text-anchor="middle" font-size="4.5" fill="#aaa" font-family="monospace">DGND</text>
+  <text x="442" y="28" text-anchor="middle" font-size="4.5" fill="#aaa" font-family="monospace">NC</text>
+  <text x="454" y="28" text-anchor="middle" font-size="4.5" fill="#aaa" font-family="monospace">GND</text>
+  <text x="466" y="28" text-anchor="middle" font-size="4.5" fill="#e74c3c" font-family="monospace">7-35V</text>
+  <text x="325" y="74" text-anchor="middle" font-size="7" fill="#888" font-family="monospace">DI</text>
+  <circle id="m-di8" cx="338" cy="70" r="4" fill="#1a3a1a" stroke="#0d1f0d" stroke-width="0.5"/>
+  <circle id="m-di7" cx="350" cy="70" r="4" fill="#1a3a1a" stroke="#0d1f0d" stroke-width="0.5"/>
+  <circle id="m-di6" cx="362" cy="70" r="4" fill="#1a3a1a" stroke="#0d1f0d" stroke-width="0.5"/>
+  <circle id="m-di5" cx="374" cy="70" r="4" fill="#1a3a1a" stroke="#0d1f0d" stroke-width="0.5"/>
+  <circle id="m-di4" cx="386" cy="70" r="4" fill="#1a3a1a" stroke="#0d1f0d" stroke-width="0.5"/>
+  <circle id="m-di3" cx="398" cy="70" r="4" fill="#1a3a1a" stroke="#0d1f0d" stroke-width="0.5"/>
+  <circle id="m-di2" cx="410" cy="70" r="4" fill="#1a3a1a" stroke="#0d1f0d" stroke-width="0.5"/>
+  <circle id="m-di1" cx="422" cy="70" r="4" fill="#1a3a1a" stroke="#0d1f0d" stroke-width="0.5"/>
+  <text x="338" y="81" text-anchor="middle" font-size="5" fill="#555" font-family="monospace">8</text>
+  <text x="350" y="81" text-anchor="middle" font-size="5" fill="#555" font-family="monospace">7</text>
+  <text x="362" y="81" text-anchor="middle" font-size="5" fill="#555" font-family="monospace">6</text>
+  <text x="374" y="81" text-anchor="middle" font-size="5" fill="#555" font-family="monospace">5</text>
+  <text x="386" y="81" text-anchor="middle" font-size="5" fill="#555" font-family="monospace">4</text>
+  <text x="398" y="81" text-anchor="middle" font-size="5" fill="#555" font-family="monospace">3</text>
+  <text x="410" y="81" text-anchor="middle" font-size="5" fill="#555" font-family="monospace">2</text>
+  <text x="422" y="81" text-anchor="middle" font-size="5" fill="#555" font-family="monospace">1</text>
+  <text x="325" y="100" text-anchor="middle" font-size="7" fill="#888" font-family="monospace">DO</text>
+  <circle id="m-do8" cx="338" cy="96" r="4" fill="#1a3a1a" stroke="#0d1f0d" stroke-width="0.5"/>
+  <circle id="m-do7" cx="350" cy="96" r="4" fill="#1a3a1a" stroke="#0d1f0d" stroke-width="0.5"/>
+  <circle id="m-do6" cx="362" cy="96" r="4" fill="#1a3a1a" stroke="#0d1f0d" stroke-width="0.5"/>
+  <circle id="m-do5" cx="374" cy="96" r="4" fill="#1a3a1a" stroke="#0d1f0d" stroke-width="0.5"/>
+  <circle id="m-do4" cx="386" cy="96" r="4" fill="#1a3a1a" stroke="#0d1f0d" stroke-width="0.5"/>
+  <circle id="m-do3" cx="398" cy="96" r="4" fill="#1a3a1a" stroke="#0d1f0d" stroke-width="0.5"/>
+  <circle id="m-do2" cx="410" cy="96" r="4" fill="#1a3a1a" stroke="#0d1f0d" stroke-width="0.5"/>
+  <circle id="m-do1" cx="422" cy="96" r="4" fill="#1a3a1a" stroke="#0d1f0d" stroke-width="0.5"/>
+  <text x="338" y="107" text-anchor="middle" font-size="5" fill="#555" font-family="monospace">8</text>
+  <text x="350" y="107" text-anchor="middle" font-size="5" fill="#555" font-family="monospace">7</text>
+  <text x="362" y="107" text-anchor="middle" font-size="5" fill="#555" font-family="monospace">6</text>
+  <text x="374" y="107" text-anchor="middle" font-size="5" fill="#555" font-family="monospace">5</text>
+  <text x="386" y="107" text-anchor="middle" font-size="5" fill="#555" font-family="monospace">4</text>
+  <text x="398" y="107" text-anchor="middle" font-size="5" fill="#555" font-family="monospace">3</text>
+  <text x="410" y="107" text-anchor="middle" font-size="5" fill="#555" font-family="monospace">2</text>
+  <text x="422" y="107" text-anchor="middle" font-size="5" fill="#555" font-family="monospace">1</text>
+  <text x="404" y="152" text-anchor="middle" font-size="10" fill="#4a9e5c" font-family="sans-serif" font-weight="bold">Waveshare</text>
+  <text x="404" y="166" text-anchor="middle" font-size="7.5" fill="#888" font-family="monospace">Modbus RTU IO 8CH</text>
+  <circle cx="476" cy="178" r="3" fill="#e74c3c" class="ar"/>
+  <text x="482" y="182" font-size="6" fill="#888" font-family="monospace">RXD</text>
+  <circle cx="476" cy="192" r="3" fill="#27ae60" class="at"/>
+  <text x="482" y="196" font-size="6" fill="#888" font-family="monospace">TXD</text>
+  <circle cx="476" cy="206" r="3" fill="#2980b9" class="ap"/>
+  <text x="482" y="210" font-size="6" fill="#888" font-family="monospace">STS</text>
+  <rect x="314" y="252" width="182" height="20" rx="3" fill="#1e2022" stroke="#111" stroke-width="0.3"/>
+  <rect x="317" y="254" width="10" height="16" rx="1" fill="#2d7a3a" stroke="#1a4d24" stroke-width="0.3"/>
+  <rect x="329" y="254" width="10" height="16" rx="1" fill="#2d7a3a" stroke="#1a4d24" stroke-width="0.3"/>
+  <rect x="341" y="254" width="10" height="16" rx="1" fill="#2d7a3a" stroke="#1a4d24" stroke-width="0.3"/>
+  <rect x="353" y="254" width="10" height="16" rx="1" fill="#2d7a3a" stroke="#1a4d24" stroke-width="0.3"/>
+  <rect x="365" y="254" width="10" height="16" rx="1" fill="#2d7a3a" stroke="#1a4d24" stroke-width="0.3"/>
+  <rect x="377" y="254" width="10" height="16" rx="1" fill="#2d7a3a" stroke="#1a4d24" stroke-width="0.3"/>
+  <rect x="389" y="254" width="10" height="16" rx="1" fill="#2d7a3a" stroke="#1a4d24" stroke-width="0.3"/>
+  <rect x="401" y="254" width="10" height="16" rx="1" fill="#2d7a3a" stroke="#1a4d24" stroke-width="0.3"/>
+  <rect x="413" y="254" width="10" height="16" rx="1" fill="#2d7a3a" stroke="#1a4d24" stroke-width="0.3"/>
+  <rect x="425" y="254" width="10" height="16" rx="1" fill="#555" stroke="#333" stroke-width="0.3"/>
+  <rect x="437" y="254" width="10" height="16" rx="1" fill="#7f8c8d" stroke="#555" stroke-width="0.3"/>
+  <rect x="449" y="254" width="10" height="16" rx="1" fill="#2d7a3a" stroke="#1a4d24" stroke-width="0.3"/>
+  <rect x="461" y="254" width="10" height="16" rx="1" fill="#2d7a3a" stroke="#1a4d24" stroke-width="0.3"/>
+  <text x="322" y="250" text-anchor="middle" font-size="4.5" fill="#aaa" font-family="monospace">DOCOM</text>
+  <text x="334" y="250" text-anchor="middle" font-size="4.5" fill="#aaa" font-family="monospace">DO8</text>
+  <text x="346" y="250" text-anchor="middle" font-size="4.5" fill="#aaa" font-family="monospace">DO7</text>
+  <text x="358" y="250" text-anchor="middle" font-size="4.5" fill="#aaa" font-family="monospace">DO6</text>
+  <text x="370" y="250" text-anchor="middle" font-size="4.5" fill="#aaa" font-family="monospace">DO5</text>
+  <text x="382" y="250" text-anchor="middle" font-size="4.5" fill="#aaa" font-family="monospace">DO4</text>
+  <text x="394" y="250" text-anchor="middle" font-size="4.5" fill="#aaa" font-family="monospace">DO3</text>
+  <text x="406" y="250" text-anchor="middle" font-size="4.5" fill="#aaa" font-family="monospace">DO2</text>
+  <text x="418" y="250" text-anchor="middle" font-size="4.5" fill="#aaa" font-family="monospace">DO1</text>
+  <text x="430" y="250" text-anchor="middle" font-size="4.5" fill="#aaa" font-family="monospace">DGND</text>
+  <text x="442" y="250" text-anchor="middle" font-size="4.5" fill="#aaa" font-family="monospace">EARTH</text>
+  <text x="454" y="250" text-anchor="middle" font-size="4.5" fill="#27ae60" font-family="monospace">485B-</text>
+  <text x="466" y="250" text-anchor="middle" font-size="4.5" fill="#27ae60" font-family="monospace">485A+</text>
+  <!-- Napájacie káble -->
+  <path d="M205 273 L205 292 L255 292 L255 273" fill="none" stroke="#e74c3c" stroke-width="2" stroke-linecap="round"/>
+  <path class="f1" d="M205 273 L205 292 L255 292 L255 273" fill="none" stroke="#ff7675" stroke-width="1.2" stroke-linecap="round"/>
+  <path d="M194 273 L194 298 L265 298 L265 273" fill="none" stroke="#444" stroke-width="2" stroke-linecap="round"/>
+  <path d="M216 28 L216 12 L466 12 L466 28" fill="none" stroke="#e74c3c" stroke-width="2" stroke-linecap="round"/>
+  <path class="f1" d="M216 28 L216 12 L466 12 L466 28" fill="none" stroke="#ff7675" stroke-width="1.2" stroke-linecap="round" style="animation-delay:.2s"/>
+  <path d="M227 28 L227 7 L454 7 L454 28" fill="none" stroke="#444" stroke-width="2" stroke-linecap="round"/>
+  <path d="M275 273 L275 284 L454 284 L454 273" fill="none" stroke="#27ae60" stroke-width="2" stroke-linecap="round"/>
+  <path class="f2" d="M275 273 L275 284 L454 284 L454 273" fill="none" stroke="#55efc4" stroke-width="1.2" stroke-linecap="round"/>
+  <path d="M285 273 L285 279 L449 279 L449 273" fill="none" stroke="#8b4513" stroke-width="2" stroke-linecap="round"/>
+  <path class="f2" d="M285 273 L285 279 L449 279 L449 273" fill="none" stroke="#d4a276" stroke-width="1.2" stroke-linecap="round" style="animation-delay:.2s"/>
+  <!-- DI vodiče (bez DI4) -->
+  <path d="M422 28 L422 14 L546 14 L546 305" fill="none" stroke="#aaa" stroke-width="0.8" stroke-dasharray="3 2"/>
+  <path d="M410 28 L410 10 L546 10 L546 334" fill="none" stroke="#aaa" stroke-width="0.8" stroke-dasharray="3 2"/>
+  <path d="M398 28 L398 6 L546 6 L546 363" fill="none" stroke="#aaa" stroke-width="0.8" stroke-dasharray="3 2"/>
+  <path d="M374 32 L374 36 L582 36 L582 305" fill="none" stroke="#aaa" stroke-width="0.8" stroke-dasharray="3 2"/>
+  <path d="M362 32 L362 40 L582 40 L582 334" fill="none" stroke="#aaa" stroke-width="0.8" stroke-dasharray="3 2"/>
+  <path d="M350 32 L350 44 L582 44 L582 363" fill="none" stroke="#aaa" stroke-width="0.8" stroke-dasharray="3 2"/>
+  <path d="M338 32 L338 48 L582 48 L582 392" fill="none" stroke="#aaa" stroke-width="0.8" stroke-dasharray="3 2"/>
+  <!-- DI tlačidlá -->
+  <g style="cursor:pointer" onclick="pressDI(1)"><rect x="525" y="305" width="42" height="26" rx="5" fill="#2c3e50" stroke="#7f8c8d" stroke-width="1"/><rect x="529" y="309" width="34" height="18" rx="3" id="btn-di1-face" fill="#3d5166" stroke="#5d7080" stroke-width="0.5"/><text x="546" y="321" text-anchor="middle" font-size="8" fill="#ccc" font-family="monospace" font-weight="500">DI 1</text></g>
+  <g style="cursor:pointer" onclick="pressDI(2)"><rect x="525" y="334" width="42" height="26" rx="5" fill="#2c3e50" stroke="#7f8c8d" stroke-width="1"/><rect x="529" y="338" width="34" height="18" rx="3" id="btn-di2-face" fill="#3d5166" stroke="#5d7080" stroke-width="0.5"/><text x="546" y="350" text-anchor="middle" font-size="8" fill="#ccc" font-family="monospace" font-weight="500">DI 2</text></g>
+  <g style="cursor:pointer" onclick="pressDI(3)"><rect x="525" y="363" width="42" height="26" rx="5" fill="#2c3e50" stroke="#7f8c8d" stroke-width="1"/><rect x="529" y="367" width="34" height="18" rx="3" id="btn-di3-face" fill="#3d5166" stroke="#5d7080" stroke-width="0.5"/><text x="546" y="379" text-anchor="middle" font-size="8" fill="#ccc" font-family="monospace" font-weight="500">DI 3</text></g>
+  <g style="cursor:pointer" onclick="pressDI(4)"><rect x="525" y="392" width="42" height="26" rx="5" fill="#2c3e50" stroke="#7f8c8d" stroke-width="1"/><rect x="529" y="396" width="34" height="18" rx="3" id="btn-di4-face" fill="#3d5166" stroke="#5d7080" stroke-width="0.5"/><text x="546" y="408" text-anchor="middle" font-size="8" fill="#ccc" font-family="monospace" font-weight="500">DI 4</text></g>
+  <g style="cursor:pointer" onclick="pressDI(5)"><rect x="561" y="305" width="42" height="26" rx="5" fill="#2c3e50" stroke="#7f8c8d" stroke-width="1"/><rect x="565" y="309" width="34" height="18" rx="3" id="btn-di5-face" fill="#3d5166" stroke="#5d7080" stroke-width="0.5"/><text x="582" y="321" text-anchor="middle" font-size="8" fill="#ccc" font-family="monospace" font-weight="500">DI 5</text></g>
+  <g style="cursor:pointer" onclick="pressDI(6)"><rect x="561" y="334" width="42" height="26" rx="5" fill="#2c3e50" stroke="#7f8c8d" stroke-width="1"/><rect x="565" y="338" width="34" height="18" rx="3" id="btn-di6-face" fill="#3d5166" stroke="#5d7080" stroke-width="0.5"/><text x="582" y="350" text-anchor="middle" font-size="8" fill="#ccc" font-family="monospace" font-weight="500">DI 6</text></g>
+  <g style="cursor:pointer" onclick="pressDI(7)"><rect x="561" y="363" width="42" height="26" rx="5" fill="#2c3e50" stroke="#7f8c8d" stroke-width="1"/><rect x="565" y="367" width="34" height="18" rx="3" id="btn-di7-face" fill="#3d5166" stroke="#5d7080" stroke-width="0.5"/><text x="582" y="379" text-anchor="middle" font-size="8" fill="#ccc" font-family="monospace" font-weight="500">DI 7</text></g>
+  <g style="cursor:pointer" onclick="pressDI(8)"><rect x="561" y="392" width="42" height="26" rx="5" fill="#2c3e50" stroke="#7f8c8d" stroke-width="1"/><rect x="565" y="396" width="34" height="18" rx="3" id="btn-di8-face" fill="#3d5166" stroke="#5d7080" stroke-width="0.5"/><text x="582" y="408" text-anchor="middle" font-size="8" fill="#ccc" font-family="monospace" font-weight="500">DI 8</text></g>
+  <!-- DO vodiče -->
+  <path d="M413 273 L413 310" fill="none" stroke="#aaa" stroke-width="0.8" stroke-dasharray="2 2"/>
+  <path d="M401 273 L401 330" fill="none" stroke="#aaa" stroke-width="0.8" stroke-dasharray="2 2"/>
+  <path d="M389 273 L389 350" fill="none" stroke="#aaa" stroke-width="0.8" stroke-dasharray="2 2"/>
+  <path d="M377 273 L377 370" fill="none" stroke="#aaa" stroke-width="0.8" stroke-dasharray="2 2"/>
+  <path d="M365 273 L365 390" fill="none" stroke="#aaa" stroke-width="0.8" stroke-dasharray="2 2"/>
+  <path d="M353 273 L353 410" fill="none" stroke="#aaa" stroke-width="0.8" stroke-dasharray="2 2"/>
+  <path d="M341 273 L341 430" fill="none" stroke="#aaa" stroke-width="0.8" stroke-dasharray="2 2"/>
+  <path d="M329 273 L329 450" fill="none" stroke="#aaa" stroke-width="0.8" stroke-dasharray="2 2"/>
+  <!-- DO svetlá -->
+  <circle id="light-do1" cx="413" cy="322" r="12" fill="#1a1a0a" stroke="#6b6b00" stroke-width="1.2"/>
+  <text x="413" y="338" text-anchor="middle" font-size="6" fill="#666" font-family="monospace">DO1</text>
+  <circle id="light-do2" cx="401" cy="342" r="12" fill="#1a0a1a" stroke="#6b006b" stroke-width="1.2"/>
+  <text x="401" y="358" text-anchor="middle" font-size="6" fill="#666" font-family="monospace">DO2</text>
+  <circle id="light-do3" cx="389" cy="362" r="12" fill="#0a1a1a" stroke="#006b6b" stroke-width="1.2"/>
+  <text x="389" y="378" text-anchor="middle" font-size="6" fill="#666" font-family="monospace">DO3</text>
+  <circle id="light-do4" cx="377" cy="382" r="12" fill="#1a0a0a" stroke="#6b1a00" stroke-width="1.2"/>
+  <text x="377" y="398" text-anchor="middle" font-size="6" fill="#666" font-family="monospace">DO4</text>
+  <circle id="light-do5" cx="365" cy="402" r="12" fill="#0a0a1a" stroke="#00006b" stroke-width="1.2"/>
+  <text x="365" y="418" text-anchor="middle" font-size="6" fill="#666" font-family="monospace">DO5</text>
+  <circle id="light-do6" cx="353" cy="422" r="12" fill="#1a0a0a" stroke="#7b241c" stroke-width="1.2"/>
+  <text x="353" y="438" text-anchor="middle" font-size="6" fill="#666" font-family="monospace">DO6</text>
+  <circle id="light-do7" cx="341" cy="442" r="12" fill="#0a1a0a" stroke="#1a7040" stroke-width="1.2"/>
+  <text x="341" y="458" text-anchor="middle" font-size="6" fill="#666" font-family="monospace">DO7</text>
+  <circle id="light-do8" cx="329" cy="462" r="12" fill="#0a0a1a" stroke="#1a5276" stroke-width="1.2"/>
+  <text x="329" y="478" text-anchor="middle" font-size="6" fill="#666" font-family="monospace">DO8</text>
+  <text x="196" y="296" text-anchor="middle" font-size="7" fill="#1a3a5c" font-family="monospace">DUPS40</text>
+  <text x="272" y="296" text-anchor="middle" font-size="7" fill="#2d7a3a" font-family="monospace">USR-DR134</text>
+  <text x="404" y="296" text-anchor="middle" font-size="7" fill="#4a9e5c" font-family="monospace">Waveshare IO 8CH</text>
+</svg>
+
+<div class="footer">Waveshare Modbus RTU IO 8CH · Interactive Demo · Orimslav/modbus-monitor-waveshare</div>
+
+<script>
+const DO_COLORS={1:'#e6d700',2:'#cc44cc',3:'#00cccc',4:'#e67300',5:'#4444ff',6:'#e74c3c',7:'#27ae60',8:'#3498db'};
+const DO_OFF={1:'#1a1a0a',2:'#1a0a1a',3:'#0a1a1a',4:'#1a0a0a',5:'#0a0a1a',6:'#1a0a0a',7:'#0a1a0a',8:'#0a0a1a'};
+function setModuleLed(id,on,color){const el=document.getElementById(id);if(!el)return;el.style.fill=on?color:'#1a3a1a';el.style.stroke=on?'#1a7040':'#0d1f0d';el.style.filter=on?'drop-shadow(0 0 4px '+color+')':'none';}
+function setDoLight(ch,on){const el=document.getElementById('light-do'+ch);if(!el)return;el.style.fill=on?DO_COLORS[ch]:DO_OFF[ch];el.style.filter=on?'drop-shadow(0 0 8px '+DO_COLORS[ch]+')':'none';}
+function toggleDO(ch,on){setModuleLed('m-do'+ch,on,DO_COLORS[ch]);setDoLight(ch,on);const ls=document.getElementById('do-led-'+ch),st=document.getElementById('do-txt-'+ch),b1=document.getElementById('do-on-'+ch),b2=document.getElementById('do-off-'+ch);if(ls){if(on){ls.classList.add('on');ls.style.background=DO_COLORS[ch];}else{ls.classList.remove('on');ls.style.background='';}}if(st){st.textContent=on?'ON':'OFF';st.classList.toggle('on',on);}if(b1)b1.style.opacity=on?'1':'0.4';if(b2)b2.style.opacity=on?'0.4':'1';}
+const diState={};
+function pressDI(ch){diState[ch]=!diState[ch];const on=diState[ch];setModuleLed('m-di'+ch,on,'#27ae60');const f=document.getElementById('btn-di'+ch+'-face');if(f){f.style.fill=on?'#27ae60':'#3d5166';f.style.stroke=on?'#1a7040':'#5d7080';}const ls=document.getElementById('di-led-'+ch),st=document.getElementById('di-txt-'+ch);if(ls){if(on){ls.classList.add('on');ls.style.background='';}else{ls.classList.remove('on');ls.style.background='';}}if(st){st.textContent=on?'ON':'OFF';st.classList.toggle('on',on);}}
+function buildDI(){const div=document.getElementById('di-rows');for(let i=1;i<=8;i++){const r=document.createElement('div');r.className='ch-row';r.innerHTML=`<span class="ch-label">DI ${i}</span><div class="led-sq" id="di-led-${i}"></div><span class="state-txt" id="di-txt-${i}">OFF</span>`;div.appendChild(r);}}
+function buildDO(){const div=document.getElementById('do-rows');for(let i=1;i<=8;i++){const r=document.createElement('div');r.className='ch-row';const dot=`<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${DO_COLORS[i]};margin-left:2px;"></span>`;r.innerHTML=`<span class="ch-label">DO ${i}</span><div class="led-sq" id="do-led-${i}"></div><span class="state-txt" id="do-txt-${i}">OFF</span><button class="btn-on" id="do-on-${i}" style="background:${DO_COLORS[i]}" onclick="toggleDO(${i},true)">ON</button><button class="btn-off" id="do-off-${i}" onclick="toggleDO(${i},false)">OFF</button>${dot}`;div.appendChild(r);}}
+buildDI();buildDO();
+for(let i=1;i<=8;i++){setModuleLed('m-do'+i,false,DO_COLORS[i]);setModuleLed('m-di'+i,false,'#27ae60');}
+</script>
+</div>
+</body>
+</html>
