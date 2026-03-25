@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="sk">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Modbus IO Monitor &amp; Control — Waveshare RTU IO 8CH</title>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0;}
+  body{background:#111;display:flex;flex-direction:column;align-items:center;padding:0;font-family:'Segoe UI',sans-serif;color:#ccc;min-height:100vh;}
+
+  /* Top bar */
+  .topbar{width:100%;background:#1e1e2e;border-bottom:1px solid #333;display:flex;align-items:center;justify-content:space-between;padding:10px 24px;}
+  .topbar-logo{display:flex;align-items:center;gap:10px;}
+  .topbar-logo img{height:32px;width:auto;}
+  .topbar-logo span{font-size:12px;color:#666;font-family:monospace;}
+  .lang-switcher{display:flex;gap:6px;}
+  .lang-btn{background:none;border:1.5px solid #444;border-radius:4px;cursor:pointer;padding:3px 6px;display:flex;align-items:center;gap:5px;font-size:11px;color:#888;transition:border-color 0.15s,color 0.15s;}
+  .lang-btn:hover{border-color:#777;color:#ccc;}
+  .lang-btn.active{border-color:#2980b9;color:#ccc;}
+  .lang-btn img{width:20px;height:14px;object-fit:cover;border-radius:2px;}
+
+  /* Main content */
+  .main{width:100%;max-width:760px;padding:32px 20px;}
+  .header{text-align:center;margin-bottom:32px;}
+  .header h1{font-size:22px;color:#e0e0e0;font-weight:600;margin-bottom:8px;}
+  .header p{font-size:13px;color:#888;line-height:1.6;}
+  .header .badge{display:inline-block;background:#2a2a3e;border:1px solid #444;border-radius:4px;padding:2px 8px;font-size:11px;color:#aaa;font-family:monospace;margin-top:6px;}
+
+  .card{background:#1e1e2e;border:1.5px solid #555;border-radius:8px;padding:24px;margin-bottom:20px;}
+  .card-title{font-size:11px;color:#666;text-transform:uppercase;letter-spacing:0.08em;margin-bottom:16px;padding-bottom:8px;border-bottom:1px solid #333;}
+
+  .btn-row{display:flex;gap:12px;flex-wrap:wrap;}
+  .btn{display:inline-flex;align-items:center;gap:8px;padding:10px 20px;border-radius:5px;font-size:13px;font-weight:500;text-decoration:none;border:none;cursor:pointer;transition:opacity 0.15s;}
+  .btn:hover{opacity:0.82;}
+  .btn-primary{background:#2980b9;color:#fff;}
+  .btn-secondary{background:#2a2a3e;border:1px solid #555;color:#ccc;}
+  .btn-demo{background:#27ae60;color:#fff;}
+  .btn svg{flex-shrink:0;}
+
+  .info-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px;}
+  .info-item label{display:block;font-size:10px;color:#666;text-transform:uppercase;letter-spacing:0.06em;margin-bottom:4px;}
+  .info-item span{font-size:12px;color:#bbb;font-family:monospace;}
+
+  .table{width:100%;border-collapse:collapse;font-size:12px;}
+  .table th{text-align:left;padding:5px 8px;color:#666;font-weight:500;font-size:10px;text-transform:uppercase;letter-spacing:0.06em;border-bottom:1px solid #333;}
+  .table td{padding:5px 8px;color:#bbb;border-bottom:1px solid #2a2a3e;font-family:monospace;}
+  .table tr:last-child td{border-bottom:none;}
+  .tag{display:inline-block;background:#252535;border:1px solid #444;border-radius:3px;padding:1px 6px;font-size:10px;color:#aaa;}
+
+  .footer{text-align:center;color:#444;font-size:11px;margin-top:24px;font-family:monospace;}
+  .footer a{color:#555;text-decoration:none;}
+  .footer a:hover{color:#888;}
+
+  @media(max-width:520px){
+    .info-grid{grid-template-columns:1fr;}
+    .btn-row{flex-direction:column;}
+    .btn{justify-content:center;}
+    .topbar{padding:10px 16px;}
+  }
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="topbar-logo">
+    <img src="img/orimslav_logo.png" alt="Orimslav logo">
+    <span>modbus-monitor-waveshare</span>
+  </div>
+  <div class="lang-switcher">
+    <button class="lang-btn" id="btn-sk" onclick="setLang('sk')">
+      <img src="img/flag_sk.svg" alt="SK"><span>SK</span>
+    </button>
+    <button class="lang-btn" id="btn-en" onclick="setLang('en')">
+      <img src="img/flag_en.svg" alt="EN"><span>EN</span>
+    </button>
+  </div>
+</div>
+
+<div class="main">
+  <div class="header">
+    <h1>Modbus IO Monitor &amp; Control</h1>
+    <p data-sk="Desktop aplikácia na monitorovanie a ovládanie modulu<br>Waveshare Modbus RTU IO 8CH cez Modbus TCP/IP"
+       data-en="Desktop application for monitoring and controlling the<br>Waveshare Modbus RTU IO 8CH module via Modbus TCP/IP">
+      Desktop aplikácia na monitorovanie a ovládanie modulu<br>Waveshare Modbus RTU IO 8CH cez Modbus TCP/IP
+    </p>
+    <span class="badge">Python 3 · pymodbus &gt;= 3.6.0 · tkinter</span>
+  </div>
+
+  <!-- Download -->
+  <div class="card">
+    <div class="card-title" data-sk="Stiahnutie" data-en="Download">Stiahnutie</div>
+    <div class="btn-row">
+      <a class="btn btn-primary" href="https://github.com/Orimslav/modbus-monitor-waveshare/releases/latest" target="_blank">
+        <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor"><path d="M7.47 10.78a.75.75 0 001.06 0l3.75-3.75a.75.75 0 00-1.06-1.06L8.75 8.44V2a.75.75 0 00-1.5 0v6.44L4.78 5.97a.75.75 0 00-1.06 1.06l3.75 3.75zM2 12.75a.75.75 0 000 1.5h12a.75.75 0 000-1.5H2z"/></svg>
+        <span data-sk="Stiahnuť aplikáciu (.exe)" data-en="Download application (.exe)">Stiahnuť aplikáciu (.exe)</span>
+      </a>
+      <a class="btn btn-secondary" href="https://github.com/Orimslav/modbus-monitor-waveshare/archive/refs/heads/main.zip">
+        <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor"><path d="M9.75 1.5H3.5A1.5 1.5 0 002 3v10a1.5 1.5 0 001.5 1.5h9A1.5 1.5 0 0014 13V5.75L9.75 1.5zm0 1.5L12.5 5.75H9.75V3zM3.5 13V3h4.75v3.5A.75.75 0 009 7.25h3.5L12.5 13H3.5z"/></svg>
+        <span data-sk="Zdrojový kód (.zip)" data-en="Source code (.zip)">Zdrojový kód (.zip)</span>
+      </a>
+      <a class="btn btn-demo" href="modbus_interactive_demo.html">
+        <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor"><path d="M2 2.5A1.5 1.5 0 013.5 1h9A1.5 1.5 0 0114 2.5v11a1.5 1.5 0 01-1.5 1.5h-9A1.5 1.5 0 012 13.5V2.5zm1.5 0v11h9V2.5h-9zM6 5.25a.75.75 0 011.28-.53l2.5 2.5a.75.75 0 010 1.06l-2.5 2.5a.75.75 0 01-1.28-.53V5.25z"/></svg>
+        <span data-sk="Interaktívne demo" data-en="Interactive demo">Interaktívne demo</span>
+      </a>
+    </div>
+  </div>
+
+  <!-- Hardware -->
+  <div class="card">
+    <div class="card-title" data-sk="Hardware" data-en="Hardware">Hardware</div>
+    <div class="info-grid">
+      <div class="info-item">
+        <label data-sk="Modul" data-en="Module">Modul</label>
+        <span>Waveshare RTU IO 8CH</span>
+      </div>
+      <div class="info-item">
+        <label data-sk="Konvertor" data-en="Converter">Konvertor</label>
+        <span>USR-DR134 (RS485 → ETH)</span>
+      </div>
+      <div class="info-item">
+        <label data-sk="Predvolená IP" data-en="Default IP">Predvolená IP</label>
+        <span>10.10.10.10</span>
+      </div>
+      <div class="info-item">
+        <label data-sk="Port / Slave ID" data-en="Port / Slave ID">Port / Slave ID</label>
+        <span>502 / 1</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Protocol -->
+  <div class="card">
+    <div class="card-title" data-sk="Modbus protokol" data-en="Modbus protocol">Modbus protokol</div>
+    <table class="table">
+      <thead>
+        <tr>
+          <th data-sk="Funkcia" data-en="Function">Funkcia</th>
+          <th data-sk="Kód" data-en="Code">Kód</th>
+          <th data-sk="Popis" data-en="Description">Popis</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td data-sk="Čítanie DI" data-en="Read DI">Čítanie DI</td>
+          <td><span class="tag">FC02</span></td>
+          <td>read_discrete_inputs · addr 0 · count 8</td>
+        </tr>
+        <tr>
+          <td data-sk="Čítanie stavu DO" data-en="Read DO state">Čítanie stavu DO</td>
+          <td><span class="tag">FC01</span></td>
+          <td>read_coils · addr 0 · count 8</td>
+        </tr>
+        <tr>
+          <td data-sk="Zápis DO" data-en="Write DO">Zápis DO</td>
+          <td><span class="tag">FC05</span></td>
+          <td data-sk="write_coil · jeden výstup" data-en="write_coil · single coil">write_coil · jeden výstup</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="footer">
+    <a href="https://github.com/Orimslav/modbus-monitor-waveshare" target="_blank">github.com/Orimslav/modbus-monitor-waveshare</a>
+    &nbsp;·&nbsp;
+    <a href="https://www.waveshare.com/wiki/Modbus_RTU_IO_8CH" target="_blank">Waveshare Wiki</a>
+  </div>
+</div>
+
+<script>
+function setLang(lang){
+  localStorage.setItem('lang',lang);
+  document.documentElement.lang=lang;
+  document.querySelectorAll('[data-sk][data-en]').forEach(el=>{
+    const val=el.getAttribute('data-'+lang);
+    if(val!==null) el.innerHTML=val;
+  });
+  document.getElementById('btn-sk').classList.toggle('active',lang==='sk');
+  document.getElementById('btn-en').classList.toggle('active',lang==='en');
+}
+setLang(localStorage.getItem('lang')||'sk');
+</script>
+</body>
+</html>
